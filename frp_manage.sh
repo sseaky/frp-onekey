@@ -532,7 +532,7 @@ configure_frps_prompt(){
     echo -e ""
 
     echo "============== Check your input =============="
-    echo -e "You Server IP      : ${COLOR_GREEN}${set_bind_addr}${COLOR_END}"
+    echo -e "Bind address       : ${COLOR_GREEN}${set_bind_addr}${COLOR_END}"
     echo -e "Bind port          : ${COLOR_GREEN}${set_bind_port}${COLOR_END}"
     echo -e "kcp support        : ${COLOR_GREEN}${set_kcp}${COLOR_END}"
     echo -e "vhost http port    : ${COLOR_GREEN}${set_vhost_http_port}${COLOR_END}"
