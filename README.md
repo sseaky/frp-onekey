@@ -22,6 +22,10 @@ sudo bash frp_manage.sh install {frps|frpc}
 sudo bash frp_manage.sh config {frps|frpc}
 ```
 
+or
+
+Modify the config file in /etc/frp/ and restart service manually.
+
 ### Uninstall
 
 ```Bash
