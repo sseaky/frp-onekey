@@ -13,7 +13,7 @@ Frp一键配置脚本，修改自 [clangcn](https://github.com/clangcn/onekey-in
 ### Install
 
 ```Bash
-wget https://raw.githubusercontent.com/seaky/frp-onekey/master/frp_manage.sh
+wget https://github.com/sseaky/frp-onekey/raw/main/frp_manage.sh
 sudo bash frp_manage.sh install {frps|frpc}
 ```
 ### Reconfig

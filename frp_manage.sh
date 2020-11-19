@@ -217,7 +217,7 @@ install_download_frp(){
         if [ -z "$FRP_DOWNLOAD_SERVER" ]
         then
             echo
-            echo -e "${COLOR_GREEN}Choice download source?:${COLOR_END}"
+            echo -e "${COLOR_GREEN}Choice download server:${COLOR_END}"
             echo    "1: Github (default)"
             echo    "2: JP"
             echo    "3: HK"
@@ -927,7 +927,7 @@ service_enable(){
         tail $LOCAL_LOG_DIR/${target}.log
     elif [ "$target" = "frpc" ]
     then
-        ping -c 1 > /dev/null 2>&1
+        ping -c 3 > /dev/null 2>&1
         frpcc status
     fi
 }
