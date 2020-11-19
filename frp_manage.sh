@@ -210,9 +210,7 @@ install_download_frp(){
     fi
     $req_down || return 1
     tarball_stem="frp_${FRP_VERSION}_linux_${ARCHS}"
-    frp_download_url="${FRP_DOWNLOAD_SERVER}/v${FRP_VERSION}/${tarball_stem}.tar.gz"
 
-    show_process "Try retrieve ${frp_download_url}${COLOR_END}"
     rm -fr ${tarball_stem}
     if [ ! -s "${tarball_stem}.tar.gz" ]
     then
@@ -243,6 +241,8 @@ install_download_frp(){
                     ;;
             esac
         fi
+        frp_download_url="${FRP_DOWNLOAD_SERVER}/v${FRP_VERSION}/${tarball_stem}.tar.gz"
+        show_process "Try retrieve ${frp_download_url}${COLOR_END}"
         wget ${frp_download_url}
     fi
     if [ -s "${tarball_stem}.tar.gz" ]; then
@@ -1006,6 +1006,7 @@ install)
     install_download_frp
     configure
     service_enable
+    rm -fr ${tarball_stem}
     ;;
 config)
     check_target
