@@ -436,7 +436,7 @@ configure_frpc_prompt(){
     fun_set_param admin_addr `fun_get_local_ip`
     $IS_MAIN && _admin_port=57001 || _admin_port=`fun_randint 57002 57099`
     fun_set_param admin_port $_admin_port
-    fun_set_param admin_user admin
+    fun_set_param admin_user "admin"
     fun_input_param admin_pwd `fun_randstr 8`
 
     fun_set_param protocol "tcp"
@@ -584,13 +584,47 @@ service_enable(){
 configure_frps(){
     configure_frps_prompt
     configure_frps_generate_ini
+    gen_frps_shortcut
+}
+
+gen_frps_shortcut(){
+    cat > ${LOCAL_BIN_DIR}/$INSTANCE_FULLNAME <<-EOF
+#!/bin/bash
+[ -z "\$1" ] && echo "$INSTANCE_FULLNAME {start|stop|restart}" && exit 1
+case "\$1" in
+start|stop|restart)
+    systemctl \$1 $INSTANCE_FULLNAME
+    systemctl status $INSTANCE_FULLNAME
+    ;;
+*)
+    echo "$INSTANCE_FULLNAME {start|stop|restart}"
+    ;;
+esac
+EOF
+    chmod a+x ${LOCAL_BIN_DIR}/$INSTANCE_FULLNAME
+    show_process "Create shortcut ${COLOR_YELLOW}${LOCAL_BIN_DIR}/$INSTANCE_FULLNAME"
 }
 
 gen_frpc_shortcut(){
     cat > ${LOCAL_BIN_DIR}/$INSTANCE_FULLNAME <<-EOF
 #!/bin/bash
-[ -z "\$1" ] && echo "$INSTANCE_FULLNAME {status|reload}" && exit 1
-${LOCAL_BIN_DIR}/frpc -c ${LOCAL_CONFIG_DIR}/$INSTANCE_FULLNAME.ini \$@
+[ -z "\$1" ] && echo "$INSTANCE_FULLNAME {start|stop|restart|status|reload}" && exit 1
+case "\$1" in
+start|stop|restart)
+    systemctl \$1 $INSTANCE_FULLNAME
+    systemctl status $INSTANCE_FULLNAME
+    ;;
+reload)
+    ${LOCAL_BIN_DIR}/$CHAR -c ${LOCAL_CONFIG_DIR}/$INSTANCE_FULLNAME.ini \$1
+    ${LOCAL_BIN_DIR}/$CHAR -c ${LOCAL_CONFIG_DIR}/$INSTANCE_FULLNAME.ini status
+    ;;
+status)
+    ${LOCAL_BIN_DIR}/frpc -c ${LOCAL_CONFIG_DIR}/$INSTANCE_FULLNAME.ini \$1
+    ;;
+*)
+    echo "$INSTANCE_FULLNAME {start|stop|restart|status|reload}"
+    ;;
+esac
 EOF
     chmod a+x ${LOCAL_BIN_DIR}/$INSTANCE_FULLNAME
     show_process "Create shortcut ${COLOR_YELLOW}${LOCAL_BIN_DIR}/$INSTANCE_FULLNAME"
@@ -650,11 +684,11 @@ show_usage(){
     echo "  -c    frps/frpc"
     echo '  -t    default: "main"'
     echo
-    echo "If installed:"
-    echo "  sudo systemctl {status|start|stop|restart} {frps|frpc}@<instance>"
+    echo "If frps@<instance> is installed:"
+    echo "  sudo frps@<instance> {start|stop|restart}"
     echo
     echo "If frpc@<instance> is installed:"
-    echo "  frpc@<instance> {status|reload}"
+    echo "  sudo frpc@<instance> {start|stop|restart|status|reload}"
     echo
 }
 
@@ -699,5 +733,4 @@ uninstall)
     show_usage
     ;;
 esac
-
 

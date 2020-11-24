@@ -39,16 +39,11 @@ Modify the config file in /etc/frp/ and restart service manually.
 sudo bash frp_manage.sh -a uninstall
 ```
 
-### Service
+### Shortcut
 
 ```bash
-sudo systemctl {status|start|stop|restart} {frps|frpc}@<instance>
-```
-
-### Reload
-
-```bash
-frpc@<instance> {status|reload}
+sudo frps@<instance> {start|stop|restart}
+sudo frpc@<instance> {start|stop|restart|status|reload}
 ```
 
 ## Example
