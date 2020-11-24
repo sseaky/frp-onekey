@@ -2,7 +2,7 @@
 # @Author: Seaky
 # @Date:   2020/11/11 15:39
 
-# bash frp_manage.sh install frps
+# sudo bash frp_manage.sh -a install -c frps [-t {instance}]
 
 #
 # param
@@ -13,23 +13,20 @@ FRP_VERSION=0.34.2
 FRP_DOWNLOAD_GITHUB="https://github.com/fatedier/frp/releases/download"
 FRP_DOWNLOAD_JP="https://download.fastgit.org/fatedier/frp/releases/download"
 FRP_DOWNLOAD_HK="https://g.ioiox.com/${FRP_DOWNLOAD_GITHUB}"
-#FRP_DOWNLOAD_SERVER=$FRP_DOWNLOAD_HK
 LOCAL_CONFIG_DIR="/etc/${NAME}"
 LOCAL_BIN_DIR="/usr/bin"
 LOCAL_SYSTEMD_DIR="/lib/systemd/system"
 LOCAL_LOG_DIR="/var/log/frp"
 
-# 自动启动
-INIT=true
 
-#
-# prepare
-#
+###########
+# prepare #
+###########
 
 set_text_color(){
     COLOR_RED='\E[1;31m'
     COLOR_GREEN='\E[1;32m'
-    COLOR_YELOW='\E[1;33m'
+    COLOR_YELLOW='\E[1;33m'
     COLOR_BLUE='\E[1;34m'
     COLOR_PINK='\E[1;35m'
     COLOR_PINKBACK_WHITEFONT='\033[45;37m'
@@ -114,11 +111,6 @@ check_os(){
         OS=Debian
     elif grep -Eqi "Ubuntu" /etc/issue || grep -Eq "Ubuntu" /etc/*-release; then
         OS=Ubuntu
-#    elif grep -Eqi "Fedora" /etc/issue || grep -Eq "Fedora" /etc/*-release; then
-#        OS=Fedora
-#    elif   grep -Eqi "CentOS" /etc/issue || grep -Eq "CentOS" /etc/*-release; then
-#        OS=CentOS
-#        check_centos_version
     else
         echo "Not support OS!"
         exit 1
@@ -163,22 +155,53 @@ show_banner(){
     echo
 }
 
-show_title(){
-    show_banner "FRP Onekey"
+fun_set_param(){
+    eval set_${1}=$2
+    echo -e "${INSTANCE_FULLNAME} $1: ${COLOR_YELLOW}${2}${COLOR_END}"
+    echo -e
 }
 
-show_usage(){
-    show_title
-    echo "Usage:"
-    echo "  bash `basename $0` {install|config} {frps|frpc}"
-    echo "  bash `basename $0` uninstall"
-    echo
-    echo "If installed:"
-    echo "  sudo systemctl {status|start|stop|restart} {frps|frpc}"
-    echo
-    echo "If frpc installed:"
-    echo "  frpcc {status|reload}"
-    echo
+fun_input_param(){
+    default_param=$2
+    input_param=$2
+    echo ""
+    echo -n -e "Please input ${INSTANCE_FULLNAME} ${COLOR_GREEN}${1}${COLOR_END}"
+    [ -n "$input_param" ] && echo -n -e "(Default : ${default_param})"
+    read -e -p ": " input_param
+    [ -z "$input_param" ] && input_param=${default_param}
+    [ -z "$input_param" ] && show_error "$1 can't be empty." && exit 1
+    fun_set_param $1 $input_param
+}
+
+fun_choice_yes_or_no(){
+    unset _choice
+    val_name=$1
+    shift
+    str_prompt=$@
+    echo -e -n "${COLOR_GREEN}$@ ${COLOR_END}([y]es or [n]o, default [y]) "
+    read _choice
+    case "${_choice}" in
+        1|yes|y)
+            eval choice_${val_name}=true
+            ;;
+        2|no|n)
+            eval choice_${val_name}=false
+            ;;
+        [eE][xX][iI][tT])
+            exit 1
+            ;;
+        *)
+            eval choice_${val_name}=true
+            ;;
+    esac
+}
+
+fun_get_local_ip(){
+    echo `ifconfig | grep -Eo 'inet (addr:)?([0-9]*\.){3}[0-9]*' | grep -Eo '([0-9]*\.){3}[0-9]*' | grep -v '127.0.0.1' | grep -v '^168' |  sed -n '1p'`
+}
+
+show_title(){
+    show_banner "FRP Onekey"
 }
 
 show_process(){
@@ -189,9 +212,9 @@ show_error(){
     echo -e "${COLOR_RED}* $1${COLOR_END}"
 }
 
-#
-# install
-#
+###########
+# install #
+###########
 
 pre_install(){
     show_process "Checking requirements of installment..."
@@ -201,7 +224,7 @@ pre_install(){
 }
 
 install_download_frp(){
-    BIN_FRPS=${LOCAL_BIN_DIR}/frps
+    BIN_FRPS=${LOCAL_BIN_DIR}/${CHAR}
     req_down=true
     if [ -s "${BIN_FRPS}" ]
     then
@@ -247,23 +270,18 @@ install_download_frp(){
     fi
     if [ -s "${tarball_stem}.tar.gz" ]; then
         tar xzf ${tarball_stem}.tar.gz
-        cp ${tarball_stem}/frps ${LOCAL_BIN_DIR}/
-        cp ${tarball_stem}/frpc ${LOCAL_BIN_DIR}/
-        cp ${tarball_stem}/systemd/frps.service ${LOCAL_SYSTEMD_DIR}
-        cp ${tarball_stem}/systemd/frpc.service ${LOCAL_SYSTEMD_DIR}
+        cp ${tarball_stem}/${CHAR} ${LOCAL_BIN_DIR}/
+        cp ${tarball_stem}/systemd/${CHAR}@.service ${LOCAL_SYSTEMD_DIR}
+        sed -i "s/\/%i.ini/\/${CHAR}@%i.ini/" ${LOCAL_SYSTEMD_DIR}/${CHAR}@.service
     else
         show_error " ${COLOR_RED}Download failed${COLOR_END}"
         exit 1
     fi
 }
 
-uninstall(){
-    rm ${LOCAL_BIN_DIR}/frps ${LOCAL_BIN_DIR}/frpc
-}
-
-#
-# config
-#
+##########
+# config #
+##########
 
 # Check port
 fun_check_port(){
@@ -287,6 +305,7 @@ fun_check_port(){
         fun_input_${port_flag}_port
     fi
 }
+
 fun_check_number(){
     num_flag=""
     strMaxNum=""
@@ -302,85 +321,6 @@ fun_check_number(){
         fun_input_${num_flag}
     fi
 }
-# input configuration data
-fun_input_bind_port(){
-    def_server_port="57000"
-    echo ""
-    echo -n -e "Please input ${target} ${COLOR_GREEN}bind_port${COLOR_END} [1-65535]"
-    read -e -p "(Default Server Port: ${def_server_port}):" serverport
-    [ -z "${serverport}" ] && serverport="${def_server_port}"
-    fun_check_port "bind" "${serverport}"
-}
-fun_input_dashboard_port(){
-    def_dashboard_port="57500"
-    echo ""
-    echo -n -e "Please input ${target} ${COLOR_GREEN}dashboard_port${COLOR_END} [1-65535]"
-    read -e -p "(Default : ${def_dashboard_port}):" input_dashboard_port
-    [ -z "${input_dashboard_port}" ] && input_dashboard_port="${def_dashboard_port}"
-    fun_check_port "dashboard" "${input_dashboard_port}"
-}
-fun_input_vhost_http_port(){
-    def_vhost_http_port="57080"
-    echo ""
-    echo -n -e "Please input ${target} ${COLOR_GREEN}vhost_http_port${COLOR_END} [1-65535]"
-    read -e -p "(Default : ${def_vhost_http_port}):" input_vhost_http_port
-    [ -z "${input_vhost_http_port}" ] && input_vhost_http_port="${def_vhost_http_port}"
-    fun_check_port "vhost_http" "${input_vhost_http_port}"
-}
-fun_input_vhost_https_port(){
-    def_vhost_https_port="57443"
-    echo ""
-    echo -n -e "Please input ${target} ${COLOR_GREEN}vhost_https_port${COLOR_END} [1-65535]"
-    read -e -p "(Default : ${def_vhost_https_port}):" input_vhost_https_port
-    [ -z "${input_vhost_https_port}" ] && input_vhost_https_port="${def_vhost_https_port}"
-    fun_check_port "vhost_https" "${input_vhost_https_port}"
-}
-fun_input_log_max_days(){
-    def_max_days="30"
-    def_log_max_days="3"
-    echo ""
-    echo -e "Please input ${target} ${COLOR_GREEN}log_max_days${COLOR_END} [1-${def_max_days}]"
-    read -e -p "(Default : ${def_log_max_days} day):" input_log_max_days
-    [ -z "${input_log_max_days}" ] && input_log_max_days="${def_log_max_days}"
-    fun_check_number "log_max_days" "${def_max_days}" "${input_log_max_days}"
-}
-fun_input_max_pool_count(){
-    def_max_pool="200"
-    def_max_pool_count="50"
-    echo ""
-    echo -e "Please input ${target} ${COLOR_GREEN}max_pool_count${COLOR_END} [1-${def_max_pool}]"
-    read -e -p "(Default : ${def_max_pool_count}):" input_max_pool_count
-    [ -z "${input_max_pool_count}" ] && input_max_pool_count="${def_max_pool_count}"
-    fun_check_number "max_pool_count" "${def_max_pool}" "${input_max_pool_count}"
-}
-fun_input_dashboard_user(){
-    def_dashboard_user="admin"
-    echo ""
-    echo -n -e "Please input ${target} ${COLOR_GREEN}dashboard_user${COLOR_END}"
-    read -e -p "(Default : ${def_dashboard_user}):" input_dashboard_user
-    [ -z "${input_dashboard_user}" ] && input_dashboard_user="${def_dashboard_user}"
-}
-fun_input_dashboard_pwd(){
-    def_dashboard_pwd=`fun_randstr 8`
-    echo ""
-    echo -n -e "Please input ${target} ${COLOR_GREEN}dashboard_pwd${COLOR_END}"
-    read -e -p "(Default : ${def_dashboard_pwd}):" input_dashboard_pwd
-    [ -z "${input_dashboard_pwd}" ] && input_dashboard_pwd="${def_dashboard_pwd}"
-}
-fun_input_token(){
-    def_token=`fun_randstr 16`
-    echo ""
-    echo -n -e "Please input ${target} ${COLOR_GREEN}token${COLOR_END}"
-    read -e -p "(Default : ${def_token}):" input_token
-    [ -z "${input_token}" ] && input_token="${def_token}"
-}
-fun_input_subdomain_host(){
-    def_subdomain_host="your.domain"
-    echo ""
-    echo -n -e "Please input ${target} ${COLOR_GREEN}subdomain_host${COLOR_END}"
-    read -e -p "(Default : ${def_subdomain_host}):" input_subdomain_host
-    [ -z "${input_subdomain_host}" ] && input_subdomain_host="${def_subdomain_host}"
-}
 
 fun_create_log_dir(){
     mkdir -p $LOCAL_LOG_DIR
@@ -388,150 +328,27 @@ fun_create_log_dir(){
 }
 
 configure_frps_prompt(){
-#    echo -e "Loading You Server IP, please wait..."
-#    defIP=$(wget -qO- ip.clang.cn | sed -r 's/\r//')
-#    echo -e "You Server IP:${COLOR_GREEN}${defIP}${COLOR_END}"
     echo -e "————————————————————————————————————————————"
-    echo -e "     ${COLOR_RED}Please input your server setting:${COLOR_END}"
+    echo -e "     ${COLOR_RED}Please input $INSTANCE_FULLNAME setting:${COLOR_END}"
     echo -e "————————————————————————————————————————————"
     fun_input_param bind_addr "0.0.0.0"
-    fun_input_bind_port
-    [ -n "${input_port}" ] && set_bind_port="${input_port}"
-    echo -e "${target} bind_port: ${COLOR_YELOW}${set_bind_port}${COLOR_END}"
-    echo -e ""
-    fun_input_vhost_http_port
-    [ -n "${input_port}" ] && set_vhost_http_port="${input_port}"
-    echo -e "${target} vhost_http_port: ${COLOR_YELOW}${set_vhost_http_port}${COLOR_END}"
-    echo -e ""
-    fun_input_vhost_https_port
-    [ -n "${input_port}" ] && set_vhost_https_port="${input_port}"
-    echo -e "${target} vhost_https_port: ${COLOR_YELOW}${set_vhost_https_port}${COLOR_END}"
-    echo -e ""
-    fun_input_dashboard_port
-    [ -n "${input_port}" ] && set_dashboard_port="${input_port}"
-    echo -e "${target} dashboard_port: ${COLOR_YELOW}${set_dashboard_port}${COLOR_END}"
-    echo -e ""
-    fun_input_dashboard_user
-    [ -n "${input_dashboard_user}" ] && set_dashboard_user="${input_dashboard_user}"
-    echo -e "${target} dashboard_user: ${COLOR_YELOW}${set_dashboard_user}${COLOR_END}"
-    echo -e ""
-    fun_input_dashboard_pwd
-    [ -n "${input_dashboard_pwd}" ] && set_dashboard_pwd="${input_dashboard_pwd}"
-    echo -e "${target} dashboard_pwd: ${COLOR_YELOW}${set_dashboard_pwd}${COLOR_END}"
-    echo -e ""
-    fun_input_token
-    [ -n "${input_token}" ] && set_token="${input_token}"
-    echo -e "${target} token: ${COLOR_YELOW}${set_token}${COLOR_END}"
-    echo -e ""
-    fun_input_subdomain_host
-    [ -n "${input_subdomain_host}" ] && set_subdomain_host="${input_subdomain_host}"
-    echo -e "${target} subdomain_host: ${COLOR_YELOW}${set_subdomain_host}${COLOR_END}"
-    echo -e ""
-    fun_input_max_pool_count
-    [ -n "${input_number}" ] && set_max_pool_count="${input_number}"
-    echo -e "${target} max_pool_count: ${COLOR_YELOW}${set_max_pool_count}${COLOR_END}"
-    echo -e ""
-    echo -e "Please select ${COLOR_GREEN}log_level${COLOR_END}"
-    echo    "1: info (default)"
-    echo    "2: warn"
-    echo    "3: error"
-    echo    "4: debug"
-    echo    "-------------------------"
-    read -e -p "Enter your choice (1, 2, 3, 4 or exit. default [1]): " str_log_level
-    case "${str_log_level}" in
-        1|[Ii][Nn][Ff][Oo])
-            str_log_level="info"
-            ;;
-        2|[Ww][Aa][Rr][Nn])
-            str_log_level="warn"
-            ;;
-        3|[Ee][Rr][Rr][Oo][Rr])
-            str_log_level="error"
-            ;;
-        4|[Dd][Ee][Bb][Uu][Gg])
-            str_log_level="debug"
-            ;;
-        [eE][xX][iI][tT])
-            exit 1
-            ;;
-        *)
-            str_log_level="info"
-            ;;
-    esac
-    echo -e "log_level: ${COLOR_YELOW}${str_log_level}${COLOR_END}"
-    echo -e ""
-    fun_input_log_max_days
-    [ -n "${input_number}" ] && set_log_max_days="${input_number}"
-    echo -e "${target} log_max_days: ${COLOR_YELOW}${set_log_max_days}${COLOR_END}"
-    echo -e ""
-    echo -e "Please select ${COLOR_GREEN}log_file${COLOR_END}"
-    echo    "1: enable (default)"
-    echo    "2: disable"
-    echo "-------------------------"
-    read -e -p "Enter your choice (1, 2 or exit. default [1]): " str_log_file
-    case "${str_log_file}" in
-        1|[yY]|[yY][eE][sS]|[oO][nN]|[tT][rR][uU][eE]|[eE][nN][aA][bB][lL][eE])
-            str_log_file="${LOCAL_LOG_DIR}/${target}.log"
-            str_log_file_flag=true
-            ;;
-        0|2|[nN]|[nN][oO]|[oO][fF][fF]|[fF][aA][lL][sS][eE]|[dD][iI][sS][aA][bB][lL][eE])
-            str_log_file="/dev/null"
-            str_log_file_flag=false
-            ;;
-        [eE][xX][iI][tT])
-            exit 1
-            ;;
-        *)
-            str_log_file="${LOCAL_LOG_DIR}/${target}.log"
-            str_log_file_flag=true
-            ;;
-    esac
-    echo -e "log_file: ${COLOR_YELOW}${str_log_file_flag}${COLOR_END}"
-    echo -e ""
-    echo -e "Please select ${COLOR_GREEN}tcp_mux${COLOR_END}"
-    echo    "1: enable (default)"
-    echo    "2: disable"
-    echo "-------------------------"
-    read -e -p "Enter your choice (1, 2 or exit. default [1]): " str_tcp_mux
-    case "${str_tcp_mux}" in
-        1|[yY]|[yY][eE][sS]|[oO][nN]|[tT][rR][uU][eE]|[eE][nN][aA][bB][lL][eE])
-            set_tcp_mux="true"
-            ;;
-        0|2|[nN]|[nN][oO]|[oO][fF][fF]|[fF][aA][lL][sS][eE]|[dD][iI][sS][aA][bB][lL][eE])
-            set_tcp_mux="false"
-            ;;
-        [eE][xX][iI][tT])
-            exit 1
-            ;;
-        *)
-            set_tcp_mux="true"
-            ;;
-    esac
-    echo -e "tcp_mux: ${COLOR_YELOW}${set_tcp_mux}${COLOR_END}"
-    echo -e ""
-    echo -e "Please select ${COLOR_GREEN}kcp support${COLOR_END}"
-    echo    "1: enable (default)"
-    echo    "2: disable"
-    echo "-------------------------"
-    read -e -p "Enter your choice (1, 2 or exit. default [1]): " str_kcp
-    case "${str_kcp}" in
-        1|[yY]|[yY][eE][sS]|[oO][nN]|[tT][rR][uU][eE]|[eE][nN][aA][bB][lL][eE])
-            set_kcp="true"
-            ;;
-        0|2|[nN]|[nN][oO]|[oO][fF][fF]|[fF][aA][lL][sS][eE]|[dD][iI][sS][aA][bB][lL][eE])
-            set_kcp="false"
-            ;;
-        [eE][xX][iI][tT])
-            exit 1
-            ;;
-        *)
-            set_kcp="true"
-            ;;
-    esac
-    echo -e "kcp support: ${COLOR_YELOW}${set_kcp}${COLOR_END}"
-    echo -e ""
+    fun_input_param bind_port 57000
+    fun_input_param token `fun_randstr 16`
+    fun_input_param vhost_http_port 57080
+    fun_input_param vhost_https_port 57443
+    $IS_MAIN && _dashboard_port=57500 || _dashboard_port=`fun_randint 57501 57599`
+    fun_input_param dashboard_port $_dashboard_port
+    fun_set_param dashboard_user "admin"
+    fun_input_param dashboard_pwd `fun_randstr 8`
+    fun_input_param subdomain_host "your.domain"
+    fun_set_param max_pool_count 30
+    fun_set_param kcp true
+    fun_set_param tcp_mux true
+    fun_input_param log_file ${LOCAL_LOG_DIR}/${INSTANCE_FULLNAME}.log
+    fun_set_param log_level "info"
+    fun_set_param log_max_days 7
 
-    echo "============== Check your input =============="
+    echo "============== Instance of $INSTANCE_FULLNAME =============="
     echo -e "Bind address       : ${COLOR_GREEN}${set_bind_addr}${COLOR_END}"
     echo -e "Bind port          : ${COLOR_GREEN}${set_bind_port}${COLOR_END}"
     echo -e "kcp support        : ${COLOR_GREEN}${set_kcp}${COLOR_END}"
@@ -544,9 +361,9 @@ configure_frps_prompt(){
     echo -e "subdomain_host     : ${COLOR_GREEN}${set_subdomain_host}${COLOR_END}"
     echo -e "tcp_mux            : ${COLOR_GREEN}${set_tcp_mux}${COLOR_END}"
     echo -e "Max Pool count     : ${COLOR_GREEN}${set_max_pool_count}${COLOR_END}"
-    echo -e "Log level          : ${COLOR_GREEN}${str_log_level}${COLOR_END}"
+    echo -e "Log level          : ${COLOR_GREEN}${set_log_level}${COLOR_END}"
     echo -e "Log max days       : ${COLOR_GREEN}${set_log_max_days}${COLOR_END}"
-    $str_log_file_flag && echo -e "Log file           : ${COLOR_GREEN}${str_log_file}${COLOR_END}" || echo -e "Log file           : ${COLOR_RED}${str_log_file_flag}${COLOR_END}"
+    echo -e "Log file           : ${COLOR_GREEN}${set_log_file}${COLOR_END}"
     echo "=============================================="
     echo ""
     echo "Press any key to start...or Press Ctrl+c to cancel"
@@ -556,235 +373,96 @@ configure_frps_prompt(){
 }
 
 configure_frps_generate_ini(){
-#    [ ! -d ${str_program_dir} ] && mkdir -p ${str_program_dir}
-#    cd ${str_program_dir}
-    [ -s $config_file ] && ( show_process "$config_file is exist, backup to ${config_file}.backup"; cp $config_file ${config_file}.backup )
-    show_process "Write $target config to $config_file"
+    [ -s $CONFIG_FILE ] && ( show_process "$CONFIG_FILE is exist, backup to ${CONFIG_FILE}.backup"; cp $CONFIG_FILE ${CONFIG_FILE}.backup )
+    show_process "Write $INSTANCE_FULLNAME config to ${COLOR_YELLOW}${CONFIG_FILE}"
 
     # Config file
-    if [[ "${set_kcp}" == "false" ]]; then
-cat > ${config_file} <<-EOF
+    cat > ${CONFIG_FILE} <<-EOF
 # [common] is integral section
 [common]
 # A literal address or host name for IPv6 must be enclosed
 # in square brackets, as in "[::1]:80", "[ipv6-host]:http" or "[ipv6-host%zone]:80"
 bind_addr = 0.0.0.0
 bind_port = ${set_bind_port}
-# udp port used for kcp protocol, it can be same with 'bind_port'
-# if not set, kcp is disabled in frps
-#kcp_bind_port = ${set_bind_port}
-# if you want to configure or reload frps by dashboard, dashboard_port must be set
-dashboard_port = ${set_dashboard_port}
-# dashboard assets directory(only for debug mode)
-dashboard_user = ${set_dashboard_user}
-dashboard_pwd = ${set_dashboard_pwd}
-# assets_dir = ./static
-vhost_http_port = ${set_vhost_http_port}
-vhost_https_port = ${set_vhost_https_port}
-# console or real logFile path like ./frps.log
-log_file = ${str_log_file}
-# debug, info, warn, error
-log_level = ${str_log_level}
-log_max_days = ${set_log_max_days}
-# auth token
-token = ${set_token}
-# It is convenient to use subdomain configure for http、https type when many people use one frps server together.
-subdomain_host = ${set_subdomain_host}
-# only allow frpc to bind ports you list, if you set nothing, there won't be any limit
-#allow_ports = 1-65535
-# pool_count in each proxy will change to max_pool_count if they exceed the maximum value
-max_pool_count = ${set_max_pool_count}
-# if tcp stream multiplexing is used, default is true
-tcp_mux = ${set_tcp_mux}
-EOF
-    else
-cat > ${config_file} <<-EOF
-# [common] is integral section
-[common]
-# A literal address or host name for IPv6 must be enclosed
-# in square brackets, as in "[::1]:80", "[ipv6-host]:http" or "[ipv6-host%zone]:80"
-bind_addr = 0.0.0.0
-bind_port = ${set_bind_port}
+
 # udp port used for kcp protocol, it can be same with 'bind_port'
 # if not set, kcp is disabled in frps
 kcp_bind_port = ${set_bind_port}
+
+# auth token
+token = ${set_token}
+
 # if you want to configure or reload frps by dashboard, dashboard_port must be set
 dashboard_port = ${set_dashboard_port}
+
 # dashboard assets directory(only for debug mode)
 dashboard_user = ${set_dashboard_user}
 dashboard_pwd = ${set_dashboard_pwd}
+
 # assets_dir = ./static
 vhost_http_port = ${set_vhost_http_port}
 vhost_https_port = ${set_vhost_https_port}
+
 # console or real logFile path like ./frps.log
-log_file = ${str_log_file}
+log_file = ${set_log_file}
 # debug, info, warn, error
-log_level = ${str_log_level}
+log_level = ${set_log_level}
 log_max_days = ${set_log_max_days}
-# auth token
-token = ${set_token}
+
 # It is convenient to use subdomain configure for http、https type when many people use one frps server together.
 subdomain_host = ${set_subdomain_host}
 # only allow frpc to bind ports you list, if you set nothing, there won't be any limit
 #allow_ports = 1-65535
+
 # pool_count in each proxy will change to max_pool_count if they exceed the maximum value
 max_pool_count = ${set_max_pool_count}
+
 # if tcp stream multiplexing is used, default is true
 tcp_mux = ${set_tcp_mux}
 EOF
-    fi
     $fun_create_log_dir && fun_create_log_dir
 }
 
-fun_input_param(){
-    default_param=$2
-    input_param=$2
-    echo ""
-    echo -n -e "Please input ${target} ${COLOR_GREEN}${1}${COLOR_END}"
-    [ -n "$input_param" ] && echo -n -e "(Default : ${default_param})"
-    read -e -p ": " input_param
-    [ -z "$input_param" ] && input_param=${default_param}
-    [ -z "$input_param" ] && show_error "$1 can't be empty." && exit 1
-    echo -e "${target} $1: ${COLOR_YELOW}${input_param}${COLOR_END}"
-    echo -e
-    eval set_${1}=$input_param
-}
-
-fun_get_local_ip(){
-    echo `ifconfig | grep -Eo 'inet (addr:)?([0-9]*\.){3}[0-9]*' | grep -Eo '([0-9]*\.){3}[0-9]*' | grep -v '127.0.0.1' | grep -v '^168' |  sed -n '1p'`
-}
 
 configure_frpc_prompt(){
     echo -e "————————————————————————————————————————————"
-    echo -e "     ${COLOR_RED}Please input your Client setting:${COLOR_END}"
+    echo -e "     ${COLOR_RED}Please input $INSTANCE_FULLNAME setting:${COLOR_END}"
     echo -e "————————————————————————————————————————————"
-    fun_input_param token
     fun_input_param server_addr
     fun_input_param server_port 57000
+    fun_input_param token
     fun_input_param client_name `hostname`
 
-#    fun_input_param admin_addr `fun_get_local_ip`
-#    fun_input_param admin_port 57001
-#    fun_input_param admin_user admin
-#    fun_input_param admin_pwd `fun_randstr 8`
+    fun_set_param admin_addr `fun_get_local_ip`
+    $IS_MAIN && _admin_port=57001 || _admin_port=`fun_randint 57002 57099`
+    fun_set_param admin_port $_admin_port
+    fun_set_param admin_user admin
+    fun_input_param admin_pwd `fun_randstr 8`
 
-    fun_input_max_pool_count
-    [ -n "${input_number}" ] && set_max_pool_count="${input_number}"
-    echo -e "${target} max_pool_count: ${COLOR_YELOW}${set_max_pool_count}${COLOR_END}"
-    echo -e ""
-    echo -e "Please select ${COLOR_GREEN}log_level${COLOR_END}"
-    echo    "1: info (default)"
-    echo    "2: warn"
-    echo    "3: error"
-    echo    "4: debug"
-    echo    "-------------------------"
-    read -e -p "Enter your choice (1, 2, 3, 4 or exit. default [1]): " str_log_level
-    case "${str_log_level}" in
-        1|[Ii][Nn][Ff][Oo])
-            str_log_level="info"
-            ;;
-        2|[Ww][Aa][Rr][Nn])
-            str_log_level="warn"
-            ;;
-        3|[Ee][Rr][Rr][Oo][Rr])
-            str_log_level="error"
-            ;;
-        4|[Dd][Ee][Bb][Uu][Gg])
-            str_log_level="debug"
-            ;;
-        [eE][xX][iI][tT])
-            exit 1
-            ;;
-        *)
-            str_log_level="info"
-            ;;
-    esac
-    echo -e "log_level: ${COLOR_YELOW}${str_log_level}${COLOR_END}"
-    echo -e ""
-    fun_input_log_max_days
-    [ -n "${input_number}" ] && set_log_max_days="${input_number}"
-    echo -e "${target} log_max_days: ${COLOR_YELOW}${set_log_max_days}${COLOR_END}"
-    echo -e ""
-    echo -e "Please select ${COLOR_GREEN}log_file${COLOR_END}"
-    echo    "1: enable (default)"
-    echo    "2: disable"
-    echo "-------------------------"
-    read -e -p "Enter your choice (1, 2 or exit. default [1]): " str_log_file
-    case "${str_log_file}" in
-        1|[yY]|[yY][eE][sS]|[oO][nN]|[tT][rR][uU][eE]|[eE][nN][aA][bB][lL][eE])
-            str_log_file="${LOCAL_LOG_DIR}/${target}.log"
-            str_log_file_flag=true
-            ;;
-        0|2|[nN]|[nN][oO]|[oO][fF][fF]|[fF][aA][lL][sS][eE]|[dD][iI][sS][aA][bB][lL][eE])
-            str_log_file="/dev/null"
-            str_log_file_flag=false
-            ;;
-        [eE][xX][iI][tT])
-            exit 1
-            ;;
-        *)
-            str_log_file="${LOCAL_LOG_DIR}/${target}.log"
-            str_log_file_flag=true
-            ;;
-    esac
-    echo -e "log_file: ${COLOR_YELOW}${str_log_file_flag}${COLOR_END}"
-    echo -e ""
-    echo -e "Please select ${COLOR_GREEN}tcp_mux${COLOR_END}"
-    echo    "1: enable (default)"
-    echo    "2: disable"
-    echo "-------------------------"
-    read -e -p "Enter your choice (1, 2 or exit. default [1]): " str_tcp_mux
-    case "${str_tcp_mux}" in
-        1|[yY]|[yY][eE][sS]|[oO][nN]|[tT][rR][uU][eE]|[eE][nN][aA][bB][lL][eE])
-            set_tcp_mux="true"
-            ;;
-        0|2|[nN]|[nN][oO]|[oO][fF][fF]|[fF][aA][lL][sS][eE]|[dD][iI][sS][aA][bB][lL][eE])
-            set_tcp_mux="false"
-            ;;
-        [eE][xX][iI][tT])
-            exit 1
-            ;;
-        *)
-            set_tcp_mux="true"
-            ;;
-    esac
-    echo -e "tcp_mux: ${COLOR_YELOW}${set_tcp_mux}${COLOR_END}"
-    echo -e ""
-    echo -e "Please select ${COLOR_GREEN}protocol${COLOR_END}"
-    echo    "1: tcp (default)"
-    echo    "2: kcp"
-    echo "-------------------------"
-    read -e -p "Enter your choice (1, 2 or exit. default [1]): " str_protocol
-    case "${str_protocol}" in
-        1|[yY]|[yY][eE][sS]|[oO][nN]|[tT][rR][uU][eE]|[eE][nN][aA][bB][lL][eE])
-            set_protocol="tcp"
-            ;;
-        0|2|[nN]|[nN][oO]|[oO][fF][fF]|[fF][aA][lL][sS][eE]|[dD][iI][sS][aA][bB][lL][eE])
-            set_protocol="kcp"
-            ;;
-        [eE][xX][iI][tT])
-            exit 1
-            ;;
-        *)
-            set_protocol="tcp"
-            ;;
-    esac
-    echo -e "protocol: ${COLOR_YELOW}${set_protocol}${COLOR_END}"
-    echo -e ""
+    fun_set_param protocol "tcp"
+    fun_set_param max_pool_count 30
+    fun_set_param tcp_mux true
+    fun_input_param log_file ${LOCAL_LOG_DIR}/${INSTANCE_FULLNAME}.log
+    fun_set_param log_level "info"
+    fun_set_param log_max_days 7
+
 
     configure_frpc_prompt_ssh
 
-    echo "============== Check your input =============="
+    echo "============== Instance of $INSTANCE_FULLNAME =============="
     echo -e "FRP Server IP      : ${COLOR_GREEN}${set_server_addr}${COLOR_END}"
     echo -e "Bind port          : ${COLOR_GREEN}${set_server_port}${COLOR_END}"
     echo -e "token              : ${COLOR_GREEN}${set_token}${COLOR_END}"
     echo -e "Client Name        : ${COLOR_GREEN}${set_client_name}${COLOR_END}"
     echo -e "protocol           : ${COLOR_GREEN}${set_protocol}${COLOR_END}"
-    echo -e "tcp_mux            : ${COLOR_GREEN}${set_tcp_mux}${COLOR_END}"
     echo -e "Max Pool count     : ${COLOR_GREEN}${set_max_pool_count}${COLOR_END}"
-    echo -e "Log level          : ${COLOR_GREEN}${str_log_level}${COLOR_END}"
+    echo -e "Admin addr         : ${COLOR_GREEN}${set_admin_addr}${COLOR_END}"
+    echo -e "Admin port         : ${COLOR_GREEN}${set_admin_port}${COLOR_END}"
+    echo -e "Admin user         : ${COLOR_GREEN}${set_admin_user}${COLOR_END}"
+    echo -e "Admin pwd          : ${COLOR_GREEN}${set_admin_pwd}${COLOR_END}"
+    echo -e "Log level          : ${COLOR_GREEN}${set_log_level}${COLOR_END}"
     echo -e "Log max days       : ${COLOR_GREEN}${set_log_max_days}${COLOR_END}"
-    $str_log_file_flag && echo -e "Log file           : ${COLOR_GREEN}${str_log_file}${COLOR_END}" || echo -e "Log file           : ${COLOR_RED}${str_log_file_flag}${COLOR_END}"
+    echo -e "Log file           : ${COLOR_GREEN}${set_log_file}${COLOR_END}"
     $ssh_fwd_enabled && echo -e "SSH Foward         : ${COLOR_GREEN}${set_server_addr}:${set_ssh_map_to_server_port} -> ${set_local_ssh_addr}:${set_local_ssh_port}${COLOR_END}"
     echo "=============================================="
     echo ""
@@ -792,34 +470,6 @@ configure_frpc_prompt(){
 
     char=`get_char`
     echo $char
-}
-
-fun_choice_yes_or_no(){
-    unset _choice
-    val_name=$1
-    shift
-    str_prompt=$@
-    echo -e "${COLOR_GREEN_LIGHTNING}$@${COLOR_END}"
-    echo -e ""
-    echo -e "Please select ${COLOR_GREEN}choice${COLOR_END}"
-    echo    "1: yes (default)"
-    echo    "2: no"
-    echo "-------------------------"
-    read -e -p "Enter your choice (1, 2 or exit. default [1]): " _choice
-    case "${_choice}" in
-        1)
-            eval choice_${val_name}=true
-            ;;
-        2)
-            eval choice_${val_name}=false
-            ;;
-        [eE][xX][iI][tT])
-            exit 1
-            ;;
-        *)
-            eval choice_${val_name}=true
-            ;;
-    esac
 }
 
 configure_frpc_prompt_ssh(){
@@ -840,26 +490,25 @@ configure_frpc_prompt_ssh(){
 }
 
 configure_frpc_generate_ini(){
-#    [ ! -d ${str_program_dir} ] && mkdir -p ${str_program_dir}
-#    cd ${str_program_dir}
-    [ -s $config_file ] && ( show_process "$config_file is exist, backup to ${config_file}.backup"; cp $config_file ${config_file}.backup )
-    show_process "Write $target config to $config_file"
+
+    [ -s $CONFIG_FILE ] && ( show_process "$CONFIG_FILE is exist, backup to ${CONFIG_FILE}.backup"; cp $CONFIG_FILE ${CONFIG_FILE}.backup )
+    show_process "Write ${INSTANCE_FULLNAME} config to ${COLOR_YELLOW}$CONFIG_FILE"
 
     # Config file
-    cat > ${config_file} <<-EOF
+    cat > ${CONFIG_FILE} <<-EOF
 [common]
 server_addr = ${set_server_addr}
 server_port = ${set_server_port}
 token = ${set_token}
 
-log_file = ${str_log_file}
-log_level = ${str_log_level}
+log_file = ${set_log_file}
+log_level = ${set_log_level}
 log_max_days = ${set_log_max_days}
 
-admin_addr = 127.0.0.1
-admin_port = 57001
-admin_user = admin
-admin_pwd = admin
+admin_addr = ${set_admin_addr}
+admin_port = ${set_admin_port}
+admin_user = ${set_admin_user}
+admin_pwd = ${set_admin_pwd}
 
 tcp_mux = ${set_tcp_mux}
 user = ${set_client_name}
@@ -869,7 +518,7 @@ EOF
 
     if $ssh_fwd_enabled
     then
-    cat >> ${config_file} <<-EOF
+    cat >> ${CONFIG_FILE} <<-EOF
 [ssh]
 type = tcp
 local_ip = $set_local_ssh_addr
@@ -879,7 +528,7 @@ remote_port = $set_ssh_map_to_server_port
 EOF
     fi
 
-cat >> ${config_file} <<-EOF
+cat >> ${CONFIG_FILE} <<-EOF
 
 #[ssh]
 #type = tcp
@@ -918,17 +567,17 @@ EOF
 }
 
 service_enable(){
-    show_process "enable $target service..."
-    systemctl enable $target
-    systemctl restart $target
-    systemctl status $target
+    show_process "Enable $INSTANCE_FULLNAME service..."
+    systemctl enable $INSTANCE_FULLNAME
+    systemctl restart $INSTANCE_FULLNAME
+    systemctl status $INSTANCE_FULLNAME
     if [ $? -ne 0 ]
     then
-        tail $LOCAL_LOG_DIR/${target}.log
-    elif [ "$target" = "frpc" ]
+        tail $LOCAL_LOG_DIR/${INSTANCE_FULLNAME}.log
+    elif [ "$CHAR" = "frpc" ]
     then
-        ping -c 3 > /dev/null 2>&1
-        frpcc status
+        ping -c 3 127.0.0.1 > /dev/null 2>&1
+        $INSTANCE_FULLNAME status
     fi
 }
 
@@ -937,71 +586,101 @@ configure_frps(){
     configure_frps_generate_ini
 }
 
-gen_frpcc(){
-    cat > ${LOCAL_BIN_DIR}/frpcc <<-EOF
+gen_frpc_shortcut(){
+    cat > ${LOCAL_BIN_DIR}/$INSTANCE_FULLNAME <<-EOF
 #!/bin/bash
-[ -z "\$1" ] && echo "frpcc {status|reload}" && exit 1
-${LOCAL_BIN_DIR}/frpc -c ${LOCAL_CONFIG_DIR}/frpc.ini \$@
+[ -z "\$1" ] && echo "$INSTANCE_FULLNAME {status|reload}" && exit 1
+${LOCAL_BIN_DIR}/frpc -c ${LOCAL_CONFIG_DIR}/$INSTANCE_FULLNAME.ini \$@
 EOF
-    chmod a+x ${LOCAL_BIN_DIR}/frpcc
-    show_process "create ${LOCAL_BIN_DIR}/frpcc"
+    chmod a+x ${LOCAL_BIN_DIR}/$INSTANCE_FULLNAME
+    show_process "Create shortcut ${COLOR_YELLOW}${LOCAL_BIN_DIR}/$INSTANCE_FULLNAME"
 }
 
 configure_frpc(){
     configure_frpc_prompt
     configure_frpc_generate_ini
-    gen_frpcc
+    gen_frpc_shortcut
 }
 
 configure(){
-    [ ! -s "${LOCAL_BIN_DIR}/${target}" ] && show_error "Bin ${LOCAL_BIN_DIR}/${target} is not exist, install first!" && show_usage && exit 1
+    [ ! -s "${LOCAL_BIN_DIR}/${CHAR}" ] && show_error "Bin ${LOCAL_BIN_DIR}/${CHAR} is not exist, install first!" && show_usage && exit 1
     mkdir -p $LOCAL_CONFIG_DIR
-    config_file=$LOCAL_CONFIG_DIR/${target}.ini
+    CONFIG_FILE=$LOCAL_CONFIG_DIR/${INSTANCE_FULLNAME}.ini
     clear
-    configure_${target}
-    show_process "configure $target done"
+    configure_${CHAR}
+    show_process "Configure ${INSTANCE_FULLNAME} done"
 }
 
 
 uninstall_frp(){
     uninst(){
         show_process "Removing $1..."
-        systemctl stop $1 2> /dev/null
-        systemctl disable $1 2> /dev/null
-        rm $LOCAL_SYSTEMD_DIR/$1.service 2> /dev/null
-        rm $LOCAL_LOG_DIR/$1.log 2> /dev/null
-        rm $LOCAL_BIN_DIR/$1 2> /dev/null
+        rm $LOCAL_SYSTEMD_DIR/$1.service $LOCAL_SYSTEMD_DIR/$1@.service 2> /dev/null
+#        rm $LOCAL_LOG_DIR/$1.log $LOCAL_LOG_DIR/$1@*.log 2> /dev/null
+        rm $LOCAL_BIN_DIR/$1 $LOCAL_BIN_DIR/$1@* 2> /dev/null
     }
     show_title
+    show_process "Removing frp ..."
+    for svs in `systemctl --plain list-units | grep -e "frp.*.service" | awk '{print $1}'`
+    do
+        systemctl stop ${svs//.service} 2> /dev/null
+        systemctl disable ${svs//.service} 2> /dev/null
+    done
     uninst frps
     uninst frpc
-    rm $LOCAL_BIN_DIR/frpcc 2> /dev/null
-    rmdir $LOCAL_LOG_DIR 2> /dev/null
     show_process "Frp is removed."
-    show_process "Config path ${LOCAL_CONFIG_DIR}/ is remained, remove it manually."
+    show_process "Config path ${LOCAL_CONFIG_DIR}/ and Log path  $LOCAL_LOG_DIR/ are remained, remove it manually."
     echo
 }
 
-check_target(){
-    if [ "$target" != "frps" -a "$target" != "frpc" ]
+check_charactor(){
+    if [ "$CHAR" != "frps" -a "$CHAR" != "frpc" ]
     then
         show_usage
         exit 1
     fi
 }
 
-#
-# main
-#
+show_usage(){
+    show_title
+    echo "Usage:"
+    echo "  bash `basename $0` -a <action> -c <character> [-t <instance>]"
+    echo "Parameters:"
+    echo "  -a    install/uninstall/config"
+    echo "  -c    frps/frpc"
+    echo '  -t    default: "main"'
+    echo
+    echo "If installed:"
+    echo "  sudo systemctl {status|start|stop|restart} {frps|frpc}@<instance>"
+    echo
+    echo "If frpc@<instance> is installed:"
+    echo "  frpc@<instance> {status|reload}"
+    echo
+}
 
-action=$1
-target=$2
+########
+# main #
+########
+
+
+while getopts 'a:c:i:' opt
+do
+  case $opt in
+    a) ACTION="$OPTARG" ;;
+    c) CHAR="$OPTARG" ;;
+    i) INSTANCE="$OPTARG" ;;
+  esac
+done
+
+INSTANCE=${INSTANCE:-"main"}
+INSTANCE_FULLNAME=${CHAR}@${INSTANCE}
+[ "$INSTANCE" = "main" ] && IS_MAIN=true || IS_MAIN=false
 
 set_text_color
 
-case "$action" in
+case "$ACTION" in
 install)
-    check_target
+    check_charactor
     pre_install
     install_download_frp
     configure
@@ -1009,7 +688,7 @@ install)
     rm -fr ${tarball_stem}
     ;;
 config)
-    check_target
+    check_charactor
     configure
     service_enable
     ;;
@@ -1018,10 +697,7 @@ uninstall)
     ;;
 *)
     show_usage
-#    target='frpc'
-#    service_enable $target
     ;;
 esac
-
 
 
