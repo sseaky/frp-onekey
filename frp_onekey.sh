@@ -232,16 +232,16 @@ check_tarball(){
 }
 
 install_download_frp(){
-    BIN_FRPS=${LOCAL_BIN_DIR}/${CHAR}
+    BIN_FRP=${LOCAL_BIN_DIR}/${CHAR}
     req_down=true
-    if [ -s "${BIN_FRPS}" ]
+    if [ -s "${BIN_FRP}" ]
     then
-        exist_version=`${BIN_FRPS} -v`
+        exist_version=`${BIN_FRP} -v`
         [ $exist_version == $FRP_VERSION ] && req_down=false
     fi
-    $req_down || return 1
     tarball_stem="frp_${FRP_VERSION}_linux_${ARCHS}"
     tarball_name="${tarball_stem}.tar.gz"
+    $req_down || return 1
 
     check_tarball
     rm -fr ${tarball_stem}
@@ -282,8 +282,6 @@ install_download_frp(){
     if [ -s "${tarball_stem}.tar.gz" ]; then
         tar xzf ${tarball_name}
         cp ${tarball_stem}/${CHAR} ${LOCAL_BIN_DIR}/
-        cp ${tarball_stem}/systemd/${CHAR}@.service ${LOCAL_SYSTEMD_DIR}
-        sed -i "s/\/%i.ini/\/${CHAR}@%i.ini/" ${LOCAL_SYSTEMD_DIR}/${CHAR}@.service
     else
         show_error " ${COLOR_RED}Download failed${COLOR_END}"
         exit 1
@@ -578,10 +576,51 @@ EOF
 }
 
 service_enable(){
-    show_process "Enable $INSTANCE_FULLNAME service..."
-    systemctl enable $INSTANCE_FULLNAME
-    systemctl restart $INSTANCE_FULLNAME
-    systemctl status $INSTANCE_FULLNAME
+    [ "${SERVICE_MANAGER}" = "systemd" ] && systemctl enable $INSTANCE_FULLNAME || update-rc.d $INSTANCE_FULLNAME defaults
+}
+
+service_disable(){
+    [ "${SERVICE_MANAGER}" = "systemd" ] && systemctl enable $INSTANCE_FULLNAME || update-rc.d -f $INSTANCE_FULLNAME remove
+}
+
+
+service_make_init(){
+    show_process "make init file /etc/init.d/$INSTANCE_FULLNAME"
+    cat > /etc/init.d/$INSTANCE_FULLNAME <<-EOF
+#!/bin/bash
+### BEGIN INIT INFO
+# Provides:          $INSTANCE_FULLNAME
+# Required-Start:    \$all
+# Required-Stop:
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: Start service $INSTANCE_FULLNAME if it exist
+
+### END INIT INFO
+
+case "\$1" in
+*)
+    ${LOCAL_BIN_DIR}/$INSTANCE_FULLNAME \$1
+;;
+esac
+EOF
+    chmod +x /etc/init.d/${INSTANCE_FULLNAME}
+}
+
+service_install(){
+    make_shortcut
+    show_process "Enable $INSTANCE_FULLNAME service with ${COLOR_PINK}$SERVICE_MANAGER ${COLOR_GREEN}"
+    if [ "${SERVICE_MANAGER}" = "systemd" ]
+    then
+        cp ${tarball_stem}/systemd/${CHAR}@.service ${LOCAL_SYSTEMD_DIR}
+        sed -i "s/\/%i.ini/\/${CHAR}@%i.ini/" ${LOCAL_SYSTEMD_DIR}/${CHAR}@.service
+    elif [ "${SERVICE_MANAGER}" = "init" ]
+    then
+        service_make_init
+    fi
+    service_enable
+    ${LOCAL_BIN_DIR}/$INSTANCE_FULLNAME restart
+#    systemctl status $INSTANCE_FULLNAME
     if [ $? -ne 0 ]
     then
         tail $LOCAL_LOG_DIR/${INSTANCE_FULLNAME}.log
@@ -592,14 +631,12 @@ service_enable(){
     fi
 }
 
-configure_frps(){
-    configure_frps_prompt
-    configure_frps_generate_ini
-    gen_frps_shortcut
-}
-
-gen_frps_shortcut(){
-    cat > ${LOCAL_BIN_DIR}/$INSTANCE_FULLNAME <<-EOF
+make_shortcut(){
+    if [ "$SERVICE_MANAGER" = "systemd" ]
+    then
+        if [ "$CHAR" = "frps" ]
+        then
+            cat > ${LOCAL_BIN_DIR}/$INSTANCE_FULLNAME <<-EOF
 #!/bin/bash
 [ -z "\$1" ] && echo "$INSTANCE_FULLNAME {start|stop|restart|status}" && exit 1
 case "\$1" in
@@ -615,12 +652,8 @@ status)
     ;;
 esac
 EOF
-    chmod a+x ${LOCAL_BIN_DIR}/$INSTANCE_FULLNAME
-    show_process "Create shortcut ${COLOR_YELLOW}${LOCAL_BIN_DIR}/$INSTANCE_FULLNAME"
-}
-
-gen_frpc_shortcut(){
-    cat > ${LOCAL_BIN_DIR}/$INSTANCE_FULLNAME <<-EOF
+        else
+            cat > ${LOCAL_BIN_DIR}/$INSTANCE_FULLNAME <<-EOF
 #!/bin/bash
 [ -z "\$1" ] && echo "$INSTANCE_FULLNAME {start|stop|restart|status|reload}" && exit 1
 case "\$1" in
@@ -640,14 +673,94 @@ status)
     ;;
 esac
 EOF
+        fi
+    else
+        cat > ${LOCAL_BIN_DIR}/$INSTANCE_FULLNAME <<-EOF
+#!/bin/bash
+
+start(){
+    ${LOCAL_BIN_DIR}/${CHAR} -c ${CONFIG_FILE} &
+}
+
+stop(){
+    get_pid
+    if [ -n "\$pid" ]
+    then
+        for p in \$pid
+        do
+            kill \$p
+        done
+    fi
+}
+
+restart(){
+    stop
+    start
+}
+
+get_pid(){
+    pid=\`ps -ef | grep "${CONFIG_FILE}" | grep -v "grep" | awk '{print \$2}'\`
+}
+
+status(){
+    get_pid
+    [ -n "\$pid" ] && echo \$pid || echo "service $INSTANCE_FULLNAME is stopped"
+}
+
+reload(){
+    if [ "${CHAR}" != "frpc" ]
+    then
+        echo "reload is only for frpc"
+        exit
+    fi
+    get_pid
+    if [ -n "\$pid" ]
+    then
+        ${LOCAL_BIN_DIR}/${CHAR} -c ${CONFIG_FILE} reload
+        ${LOCAL_BIN_DIR}/${CHAR} -c ${CONFIG_FILE} status
+    else
+        status
+    fi
+}
+
+case "\$1" in
+start)
+    restart
+    status
+;;
+stop)
+    stop
+    status
+;;
+restart)
+    restart
+    status
+;;
+status)
+    status
+    [ -n "\$pid" -a "${CHAR}" = "frpc" ] && ${LOCAL_BIN_DIR}/${CHAR} -c ${CONFIG_FILE} status
+;;
+reload)
+    reload
+;;
+*)
+    echo "$INSTANCE_FULLNAME {start|stop|restart|status|reload}"
+esac
+EOF
+    fi
     chmod a+x ${LOCAL_BIN_DIR}/$INSTANCE_FULLNAME
-    show_process "Create shortcut ${COLOR_YELLOW}${LOCAL_BIN_DIR}/$INSTANCE_FULLNAME"
+    show_process "Create shortcut ${COLOR_YELLOW}${LOCAL_BIN_DIR}/${INSTANCE_FULLNAME}"
+}
+
+
+configure_frps(){
+    configure_frps_prompt
+    configure_frps_generate_ini
 }
 
 configure_frpc(){
     configure_frpc_prompt
     configure_frpc_generate_ini
-    gen_frpc_shortcut
 }
 
 configure(){
@@ -659,21 +772,32 @@ configure(){
     show_process "Configure ${INSTANCE_FULLNAME} done"
 }
 
-
 uninstall_frp(){
     uninst(){
         show_process "Removing $1..."
         rm $LOCAL_SYSTEMD_DIR/$1.service $LOCAL_SYSTEMD_DIR/$1@.service 2> /dev/null
-#        rm $LOCAL_LOG_DIR/$1.log $LOCAL_LOG_DIR/$1@*.log 2> /dev/null
+        rm /etc/init.d/$1 $LOCAL_SYSTEMD_DIR/$1@* 2> /dev/null
         rm $LOCAL_BIN_DIR/$1 $LOCAL_BIN_DIR/$1@* 2> /dev/null
     }
     show_title
     show_process "Removing frp ..."
-    for svs in `systemctl --plain list-units | grep -e "frp.*.service" | awk '{print $1}'`
-    do
-        systemctl stop ${svs//.service} 2> /dev/null
-        systemctl disable ${svs//.service} 2> /dev/null
-    done
+    $INSTANCE_FULLNAME stop 2> /dev/null
+    if [ "${SERVICE_MANAGER}" = "systemd" ]
+    then
+        for svs in `systemctl --plain list-units | grep -e "frp.*.service" | awk '{print $1}'`
+        do
+            systemctl stop ${svs//.service} 2> /dev/null
+            systemctl disable ${svs//.service} 2> /dev/null
+        done
+    else
+        cd /etc/init.d/
+        for svs in `ls frp* 2> /dev/null`
+        do
+            /etc/init.d/${svs} stop 2> /dev/null
+            update-rc.d -f ${svs} remove 2> /dev/null
+            rm /etc/init.d/${svs} 2> /dev/null
+        done
+    fi
     uninst frps
     uninst frpc
     show_process "Frp is removed."
@@ -685,6 +809,19 @@ check_charactor(){
     if [ "$CHAR" != "frps" -a "$CHAR" != "frpc" ]
     then
         show_usage
+        exit 1
+    fi
+}
+
+check_service_manager(){
+    if `which systemctl > /dev/null`
+    then
+        SERVICE_MANAGER="systemd"
+    elif `which update-rc.d > /dev/null`
+    then
+        SERVICE_MANAGER="init"
+    else
+        show_error "Need systemd or update-rc.d to install frp as service."
         exit 1
     fi
 }
@@ -726,19 +863,21 @@ INSTANCE_FULLNAME=${CHAR}@${INSTANCE}
 
 set_text_color
 
+check_service_manager
+
 case "$ACTION" in
 install)
     check_charactor
     pre_install
     install_download_frp
     configure
-    service_enable
+    service_install
     rm -fr ${tarball_stem}
     ;;
 config)
     check_charactor
     configure
-    service_enable
+    service_install
     ;;
 uninstall)
     uninstall_frp

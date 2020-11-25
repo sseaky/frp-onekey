@@ -5,7 +5,7 @@ About
 Frp一键配置脚本，修改自 [clangcn](https://github.com/clangcn/onekey-install-shell) ，frp版本 0.34.2
 
 - frp服务端、客户端一键安装，配置、删除
-- 使用frp包自带的service管理启动服务
+- 支持systemd或rc管理服务
 - 支持多实例服务，默认实例名为**main**
 - 在ubuntu/debian上测试
 
@@ -15,12 +15,12 @@ Frp一键配置脚本，修改自 [clangcn](https://github.com/clangcn/onekey-in
 
 ```Bash
 wget https://github.com/sseaky/frp-onekey/raw/main/frp_onekey.sh
-sudo bash frp_manage.sh -a install -c {frps|frpc}
+sudo bash frp_onekey.sh -a install -c {frps|frpc}
 ```
 or
 
 ```bash
-sudo bash frp_manage.sh -a install -c {frps|frpc} -i <instance>
+sudo bash frp_onekey.sh -a install -c {frps|frpc} -i <instance>
 ```
 
 如果wget碰到 
@@ -39,7 +39,7 @@ Connecting to raw.githubusercontent.com (raw.githubusercontent.com)|151.101.228.
 ### Reconfig
 
 ```bash
-sudo bash frp_manage.sh config {frps|frpc}@<instance>
+sudo bash frp_onekey.sh config {frps|frpc}@<instance>
 ```
 
 or
@@ -49,13 +49,13 @@ Modify the config file in /etc/frp/ and restart service manually.
 ### Uninstall
 
 ```Bash
-sudo bash frp_manage.sh -a uninstall
+sudo bash frp_onekey.sh -a uninstall
 ```
 
 ### Shortcut
 
 ```bash
-sudo frps@<instance> {start|stop|restart}
+sudo frps@<instance> {start|stop|restart|status}
 sudo frpc@<instance> {start|stop|restart|status|reload}
 ```
 
