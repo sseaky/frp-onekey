@@ -2,11 +2,12 @@
 # @Author: Seaky
 # @Date:   2020/11/11 15:39
 
-# sudo bash frp_manage.sh -a install -c frps [-t {instance}]
+# sudo bash frp_onekey.sh -a install -c {frps|frpc} [-t {instance}]
 
-#
-# param
-#
+#########
+# param #
+#########
+
 NAME="frp"
 INSTALL_VERSION="201011"
 FRP_VERSION=0.34.2
@@ -16,7 +17,7 @@ FRP_DOWNLOAD_HK="https://g.ioiox.com/${FRP_DOWNLOAD_GITHUB}"
 LOCAL_CONFIG_DIR="/etc/${NAME}"
 LOCAL_BIN_DIR="/usr/bin"
 LOCAL_SYSTEMD_DIR="/lib/systemd/system"
-LOCAL_LOG_DIR="/var/log/frp"
+LOCAL_LOG_DIR="/var/log/${NAME}"
 
 
 ###########
@@ -223,6 +224,13 @@ pre_install(){
     check_packet
 }
 
+check_tarball(){
+    if [ -s "${tarball_name}" ]
+    then
+        `tar ztf "${tarball_name}" > /dev/null 2>&1` || rm ${tarball_name}
+    fi
+}
+
 install_download_frp(){
     BIN_FRPS=${LOCAL_BIN_DIR}/${CHAR}
     req_down=true
@@ -233,17 +241,20 @@ install_download_frp(){
     fi
     $req_down || return 1
     tarball_stem="frp_${FRP_VERSION}_linux_${ARCHS}"
+    tarball_name="${tarball_stem}.tar.gz"
 
+    check_tarball
     rm -fr ${tarball_stem}
-    if [ ! -s "${tarball_stem}.tar.gz" ]
+
+    if [ ! -s "${tarball_name}" ]
     then
         if [ -z "$FRP_DOWNLOAD_SERVER" ]
         then
             echo
             echo -e "${COLOR_GREEN}Choice download server:${COLOR_END}"
             echo    "1: Github (default)"
-            echo    "2: JP"
-            echo    "3: HK"
+            echo    "2: HK"
+            echo    "3: JP"
             echo    "-------------------------"
             read -e -p "Enter your choice (1, 2, 3 or exit. default [1]): " str_choice_source
             case "${str_choice_source}" in
@@ -251,10 +262,10 @@ install_download_frp(){
                     FRP_DOWNLOAD_SERVER=$FRP_DOWNLOAD_GITHUB
                     ;;
                 2)
-                    FRP_DOWNLOAD_SERVER=$FRP_DOWNLOAD_JP
+                    FRP_DOWNLOAD_SERVER=$FRP_DOWNLOAD_HK
                     ;;
                 3)
-                    FRP_DOWNLOAD_SERVER=$FRP_DOWNLOAD_HK
+                    FRP_DOWNLOAD_SERVER=$FRP_DOWNLOAD_JP
                     ;;
                 [eE][xX][iI][tT])
                     exit 1
@@ -264,12 +275,12 @@ install_download_frp(){
                     ;;
             esac
         fi
-        frp_download_url="${FRP_DOWNLOAD_SERVER}/v${FRP_VERSION}/${tarball_stem}.tar.gz"
+        frp_download_url="${FRP_DOWNLOAD_SERVER}/v${FRP_VERSION}/${tarball_name}"
         show_process "Try retrieve ${frp_download_url}${COLOR_END}"
-        wget ${frp_download_url}
+        wget --no-check-certificate ${frp_download_url}
     fi
     if [ -s "${tarball_stem}.tar.gz" ]; then
-        tar xzf ${tarball_stem}.tar.gz
+        tar xzf ${tarball_name}
         cp ${tarball_stem}/${CHAR} ${LOCAL_BIN_DIR}/
         cp ${tarball_stem}/systemd/${CHAR}@.service ${LOCAL_SYSTEMD_DIR}
         sed -i "s/\/%i.ini/\/${CHAR}@%i.ini/" ${LOCAL_SYSTEMD_DIR}/${CHAR}@.service
@@ -576,7 +587,7 @@ service_enable(){
         tail $LOCAL_LOG_DIR/${INSTANCE_FULLNAME}.log
     elif [ "$CHAR" = "frpc" ]
     then
-        ping -c 3 127.0.0.1 > /dev/null 2>&1
+        sleep 3
         $INSTANCE_FULLNAME status
     fi
 }
