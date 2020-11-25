@@ -601,10 +601,13 @@ configure_frps(){
 gen_frps_shortcut(){
     cat > ${LOCAL_BIN_DIR}/$INSTANCE_FULLNAME <<-EOF
 #!/bin/bash
-[ -z "\$1" ] && echo "$INSTANCE_FULLNAME {start|stop|restart}" && exit 1
+[ -z "\$1" ] && echo "$INSTANCE_FULLNAME {start|stop|restart|status}" && exit 1
 case "\$1" in
 start|stop|restart)
     systemctl \$1 $INSTANCE_FULLNAME
+    systemctl status $INSTANCE_FULLNAME
+    ;;
+status)
     systemctl status $INSTANCE_FULLNAME
     ;;
 *)
