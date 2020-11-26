@@ -850,11 +850,14 @@ show_usage(){
 
 while getopts 'a:c:i:' opt
 do
-  case $opt in
-    a) ACTION="$OPTARG" ;;
-    c) CHAR="$OPTARG" ;;
-    i) INSTANCE="$OPTARG" ;;
-  esac
+    case $opt in
+        a) ACTION="$OPTARG" ;;
+        c) CHAR="$OPTARG" ;;
+        i) INSTANCE="$OPTARG" ;;
+        *)
+            show_usage
+            exit
+    esac
 done
 
 INSTANCE=${INSTANCE:-"main"}
