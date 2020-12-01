@@ -13,7 +13,7 @@ Frp一键配置脚本，修改自 [clangcn](https://github.com/clangcn/onekey-in
 
 ### Install
 ```bash
-sudo bash -c "bash <(wget -qO - https://github.com/sseaky/frp-onekey/raw/main/frp_onekey.sh) -a install -c {frps|frpc} [-i <instance>]"
+sudo bash -c "bash <(wget -qO - https://github.com/sseaky/frp-onekey/raw/main/frp_onekey.sh)"
 ```
 or
 ```Bash
