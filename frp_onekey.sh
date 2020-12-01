@@ -34,6 +34,7 @@ set_text_color(){
     COLOR_GREEN_LIGHTNING='\033[32m \033[05m'
     COLOR_END='\E[0m'
 }
+set_text_color
 
 get_char(){
     SAVEDSTTY=`stty -g`
@@ -805,6 +806,21 @@ uninstall_frp(){
     echo
 }
 
+check_script_args(){
+    if [ -z "$ACTION" ]; then
+        fun_input_param ACTION install
+        ACTION=$set_ACTION
+    fi
+    if [ -z "$CHAR" ]; then
+        fun_input_param CHAR frpc
+        CHAR=$set_CHAR
+    fi
+    if [ -z "$INSTANCE" ]; then
+        fun_input_param INSTANCE main
+        INSTANCE=$set_INSTANCE
+    fi
+}
+
 check_charactor(){
     if [ "$CHAR" != "frps" -a "$CHAR" != "frpc" ]
     then
@@ -860,11 +876,10 @@ do
     esac
 done
 
-INSTANCE=${INSTANCE:-"main"}
+check_script_args
+
 INSTANCE_FULLNAME=${CHAR}@${INSTANCE}
 [ "$INSTANCE" = "main" ] && IS_MAIN=true || IS_MAIN=false
-
-set_text_color
 
 check_service_manager
 
