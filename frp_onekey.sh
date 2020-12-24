@@ -720,9 +720,15 @@ get_pid(){
     pid=\`ps -ef | grep "${CONFIG_FILE}" | grep -v "grep" | awk '{print \$2}'\`
 }
 
-status(){
+is_alive(){
     get_pid
     [ -n "\$pid" ] && echo \$pid || echo "service $INSTANCE_FULLNAME is stopped"
+}
+
+status(){
+    is_alive
+    sleep 1
+    [ -n "\$pid" -a "${CHAR}" = "frpc" ] && ${LOCAL_BIN_DIR}/${CHAR} -c ${CONFIG_FILE} status
 }
 
 reload(){
@@ -731,13 +737,11 @@ reload(){
         echo "reload is only for frpc"
         exit
     fi
-    get_pid
+    is_alive
     if [ -n "\$pid" ]
     then
         ${LOCAL_BIN_DIR}/${CHAR} -c ${CONFIG_FILE} reload
         ${LOCAL_BIN_DIR}/${CHAR} -c ${CONFIG_FILE} status
-    else
-        status
     fi
 }
 
@@ -761,7 +765,6 @@ restart)
 ;;
 status)
     status
-    [ -n "\$pid" -a "${CHAR}" = "frpc" ] && ${LOCAL_BIN_DIR}/${CHAR} -c ${CONFIG_FILE} status
 ;;
 reload)
     reload
