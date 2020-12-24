@@ -656,18 +656,35 @@ EOF
         else
             cat > ${LOCAL_BIN_DIR}/$INSTANCE_FULLNAME <<-EOF
 #!/bin/bash
-[ -z "\$1" ] && echo "$INSTANCE_FULLNAME {start|stop|restart|status|reload}" && exit 1
+[ -z "\$1" ] && echo "$INSTANCE_FULLNAME {start|stop|restart|status|reload|config}" && exit 1
+
+status(){
+    ${LOCAL_BIN_DIR}/$CHAR -c ${LOCAL_CONFIG_DIR}/$INSTANCE_FULLNAME.ini status
+}
+
+reload(){
+    ${LOCAL_BIN_DIR}/$CHAR -c ${LOCAL_CONFIG_DIR}/$INSTANCE_FULLNAME.ini reload
+    status
+}
+
+config(){
+    vi ${CONFIG_FILE}
+    reload
+}
+
 case "\$1" in
 start|stop|restart)
     systemctl \$1 $INSTANCE_FULLNAME
     systemctl status $INSTANCE_FULLNAME
     ;;
 reload)
-    ${LOCAL_BIN_DIR}/$CHAR -c ${LOCAL_CONFIG_DIR}/$INSTANCE_FULLNAME.ini \$1
-    ${LOCAL_BIN_DIR}/$CHAR -c ${LOCAL_CONFIG_DIR}/$INSTANCE_FULLNAME.ini status
+    reload
     ;;
 status)
-    ${LOCAL_BIN_DIR}/frpc -c ${LOCAL_CONFIG_DIR}/$INSTANCE_FULLNAME.ini \$1
+    status
+    ;;
+config)
+    config
     ;;
 *)
     echo "$INSTANCE_FULLNAME {start|stop|restart|status|reload}"
@@ -724,6 +741,11 @@ reload(){
     fi
 }
 
+config(){
+    vi ${CONFIG_FILE}
+    reload
+}
+
 case "\$1" in
 start)
     restart
@@ -744,8 +766,11 @@ status)
 reload)
     reload
 ;;
+config)
+    config
+;;
 *)
-    echo "$INSTANCE_FULLNAME {start|stop|restart|status|reload}"
+    echo "$INSTANCE_FULLNAME {start|stop|restart|status|reload|config}"
 esac
 EOF
     fi
